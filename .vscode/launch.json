@@ -13,11 +13,10 @@
 			"skipFiles": [
 				"<node_internals>/**"
 			],
-			"program": "${workspaceFolder}/dist/index.js",
+			"program": "${workspaceFolder}/dist/src/server/index.js",
 			"outFiles": [
 				"${workspaceFolder}/**/*.js"
 			],
-			"console": "integratedTerminal",
 			"preLaunchTask": "tsc: watch - tsconfig.json",
 			"postDebugTask": "Terminate All Tasks",
 		}

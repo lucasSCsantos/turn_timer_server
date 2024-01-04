@@ -1,17 +1,67 @@
-import express, { type Express, type Request, type Response } from 'express';
-import dotenv from 'dotenv';
+import http from 'http';
+import { Server } from 'socket.io';
 
-dotenv.config();
+const httpServer = http.createServer();
 
-const app: Express = express();
-const port = process.env.PORT ?? 3002;
-
-app.get('/', (req: Request, res: Response) => {
-  res.send('Express + TypeScript Server');
+const io = new Server(httpServer, {
+  cors: {
+    origin: ['https://rumikub-counter.vercel.app'], // Replace with your frontend URL
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['my-custom-header'],
+    credentials: true,
+  },
 });
 
-app.listen(port, () => {
-  console.log(`[server]: Server is running at http://localhost:${port}`);
+io.on('connection', (socket) => {
+  console.log('A user connected:', socket.id);
+
+  socket.on('join_room', (roomId: string) => {
+    void socket.join(roomId);
+    const clients = io.sockets.adapter.rooms.get(roomId);
+
+    console.log(clients?.size);
+
+    if (clients?.size === 1) {
+      socket.emit('start');
+    }
+
+    console.log(`user with id-${socket.id} joined room - ${roomId}`);
+    socket.emit('number', clients?.size);
+  });
+
+  socket.on(
+    'press_btn',
+    (data: { roomId: string; number: number; start: boolean }) => {
+      // This will send a message to a specific room ID
+      const clients = io.sockets.adapter.rooms.get(data.roomId);
+      const actualNumber = data.number;
+
+      if (clients) {
+        const clientsList = Array.from(clients);
+
+        const nextNumber = clients.size === actualNumber ? 1 : actualNumber + 1;
+        const nextClient = clientsList[nextNumber - 1];
+
+        console.log(data.start);
+
+        if (data.start) {
+          socket.emit('turn');
+        } else {
+          io.to(nextClient).emit('turn');
+        }
+      }
+
+      // socket.to(data.roomId).emit("receive_press", data);
+    }
+  );
+
+  socket.on('disconnect', () => {
+    console.log('A user disconnected:', socket.id);
+  });
 });
 
-export default app;
+const PORT = process.env.PORT | 3002;
+
+httpServer.listen(PORT, () => {
+  console.log(`Socket.io server is running on port ${PORT}`);
+});
