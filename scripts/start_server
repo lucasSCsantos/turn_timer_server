@@ -1,5 +1,6 @@
 #!/bin/bash
 # npm install
 cd /home/ubuntu/turn_timer_server
+ls
 npm run build
 pm2 start ./dist/src/server/index.js
