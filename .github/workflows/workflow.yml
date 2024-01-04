@@ -36,6 +36,6 @@ jobs:
         run: |
           aws deploy create-deployment \
             --application-name turn-timer-server \
-            --deployment-group-name TurnTimerServerDeployment \
+            --deployment-group-name TurnTimerServerDeploy \
             --deployment-config-name CodeDeployDefault.OneAtATime \
             --github-location repository=${{ github.repository }},commitId=${{ github.sha }}
