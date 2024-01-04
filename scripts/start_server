@@ -2,5 +2,4 @@
 # npm install
 cd /home/ubuntu/turn_timer_server
 tsc
-pm2 kill
-pm2 start ./dist/src/server/index.js
+pm2 startOrRestart ./dist/src/server/index.js
