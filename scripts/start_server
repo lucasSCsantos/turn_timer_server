@@ -1,0 +1,4 @@
+#!/bin/bash
+# npm install
+cd /home/ubuntu/turn_timer_server
+node ./dist/src/server/index.js
