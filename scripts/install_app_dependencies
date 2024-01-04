@@ -1,3 +1,5 @@
 #!/bin/bash
 cd /home/ubuntu/turn_timer_server
+node -v
+npm -v
 npm install
