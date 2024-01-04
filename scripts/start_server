@@ -1,8 +1,5 @@
 #!/bin/bash
 # npm install
 cd /home/ubuntu/turn_timer_server
-rm -r dist
-tsc -v
-node -v
 npm run build
 pm2 startOrRestart ecosystem.config.js
