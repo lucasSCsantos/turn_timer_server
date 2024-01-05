@@ -71,3 +71,5 @@ const PORT = process.env.PORT | 3003;
 httpServer.listen(PORT, () => {
   console.log(`Socket.io server is running on port ${PORT}`);
 });
+
+export default app;
