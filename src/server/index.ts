@@ -1,69 +1,142 @@
 import http from 'http';
 import { Server } from 'socket.io';
+import { validateUsername } from '../helpers/users';
+import errors from '../data/errors';
+import {
+  type ChangeTurnEventData,
+  type JoinRoomEventData,
+} from '../@types/socket';
 
-const httpServer = http.createServer((req, res) => {
-  // Check the request method and URL
-  if (req.method === 'GET' && req.url === '/') {
-    // Handle the GET request for the root URL
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Hello, this is a GET request!');
-  }
-});
-// const app = express();
+const httpServer = http.createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ['https://rumikub-counter.vercel.app'], // Replace with your frontend URL
+    origin: [
+      'https://rumikub-counter.vercel.app',
+      'http://localhost:3000',
+      'https://rumikub-counter-git-develop-lucasscsantos.vercel.app',
+    ],
     methods: ['GET', 'POST'],
     // allowedHeaders: ['my-custom-header'],
     credentials: true,
   },
 });
 
+const users: Record<
+  string,
+  Record<
+    string,
+    {
+      username: string;
+      role: string;
+      number: number;
+    }
+  >
+> = {};
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
+  let currentRoomId: string;
 
-  socket.on('join_room', (roomId: string) => {
+  socket.on('join_room', ({ roomId, username }: JoinRoomEventData) => {
     void socket.join(roomId);
+
+    currentRoomId = roomId;
+
+    users[roomId] = {
+      ...users[roomId],
+    };
+
+    const usernameAlreadyExists = validateUsername(users, username, roomId);
+
+    if (usernameAlreadyExists) {
+      socket.emit('user_join_error', {
+        error: errors.username_already_exists,
+      });
+
+      return;
+    }
+
     const clients = io.sockets.adapter.rooms.get(roomId);
 
-    console.log(clients?.size);
+    if (clients) {
+      users[roomId][socket.id] = {
+        username,
+        role: clients?.size === 1 ? 'ADMIN' : 'USER',
+        number: clients?.size,
+      };
 
-    if (clients?.size === 1) {
-      socket.emit('start');
+      socket.emit('user_join', {
+        username,
+        invite_id: 1,
+        role: clients?.size === 1 ? 'ADMIN' : 'USER',
+        number: clients?.size,
+      });
+
+      const [admin] = Array.from(clients);
+
+      io.to(admin).emit('user_log', {
+        id: socket.id,
+        username,
+        action: 'connect',
+      });
     }
-
-    console.log(`user with id-${socket.id} joined room - ${roomId}`);
-    socket.emit('number', clients?.size);
   });
 
-  socket.on(
-    'press_btn',
-    (data: { roomId: string; number: number; start: boolean }) => {
-      // This will send a message to a specific room ID
-      const clients = io.sockets.adapter.rooms.get(data.roomId);
-      const actualNumber = data.number;
+  socket.on('change_turn', ({ roomId, number }: ChangeTurnEventData) => {
+    const clients = io.sockets.adapter.rooms.get(roomId);
+    const actualNumber = number;
 
-      if (clients) {
-        const clientsList = Array.from(clients);
+    if (clients) {
+      const clientsList = Array.from(clients);
 
-        const nextNumber = clients.size === actualNumber ? 1 : actualNumber + 1;
-        const nextClient = clientsList[nextNumber - 1];
+      const nextNumber = clients.size === actualNumber ? 1 : actualNumber + 1;
+      const nextClient = clientsList[nextNumber - 1];
 
-        console.log(data.start);
-
-        if (data.start) {
-          socket.emit('turn');
-        } else {
-          io.to(nextClient).emit('turn');
-        }
-      }
-
-      // socket.to(data.roomId).emit("receive_press", data);
+      io.to(nextClient).emit('turn');
     }
-  );
+  });
 
   socket.on('disconnect', () => {
+    const roomId = currentRoomId;
+
+    if (roomId) {
+      const clients = io.sockets.adapter.rooms.get(roomId);
+
+      if (clients) {
+        Array.from(clients).forEach((client, index) => {
+          socket.to(client).emit('users_change', {
+            role: index === 0 ? 'ADMIN' : 'USER',
+            number: index + 1,
+          });
+        });
+
+        const [admin] = Array.from(clients);
+
+        io.to(admin).emit('user_log', {
+          id: socket.id,
+          username: users[roomId][socket.id].username,
+          action: 'disconnect',
+        });
+
+        if (admin !== socket.id && users[roomId][socket.id].role === 'ADMIN') {
+          io.to(admin).emit('user_log', {
+            id: admin,
+            username: users[roomId][admin].username,
+            action: 'admin_change',
+          });
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        delete users[roomId][socket.id];
+      }
+
+      if (!clients) {
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        delete users[roomId];
+      }
+    }
+
     console.log('A user disconnected:', socket.id);
   });
 });

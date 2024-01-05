@@ -2,7 +2,7 @@
   "name": "node-ts-eslint-prettier-debug-template",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/src/index.js",
+  "main": "dist/src/server/index.js",
   "scripts": {
     "test": "jest --coverage --forceExit",
     "dev": "tsx watch src/index.ts",
