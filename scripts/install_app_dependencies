@@ -1,5 +1,5 @@
 #!/bin/bash
-source /home/ec2-ubuntu/.bash_profile
+source /home/ubuntu/.bash_profile
 cd /home/ubuntu/turn_timer_server
 node -v
 npm -v
