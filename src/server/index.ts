@@ -1,7 +1,13 @@
 import http from 'http';
 import { Server } from 'socket.io';
+import express from 'express';
 
 const httpServer = http.createServer();
+const app = express();
+
+app.get('/', (req, res) => {
+  res.send('test');
+});
 
 const io = new Server(httpServer, {
   cors: {
