@@ -35,4 +35,3 @@ jobs:
             --deployment-group-name TurnTimerServerDeploy \
             --deployment-config-name CodeDeployDefault.OneAtATime \
             --github-location repository=${{ github.repository }},commitId=${{ github.sha }} \
-            --file-exists-behavior RETAIN
