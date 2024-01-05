@@ -1,19 +1,21 @@
 import http from 'http';
 import { Server } from 'socket.io';
-import express, { type Request, type Response } from 'express';
 
-const httpServer = http.createServer();
-const app = express();
-
-app.get('/', (req: Request, res: Response) => {
-  res.send('Express + TypeScript Server');
+const httpServer = http.createServer((req, res) => {
+  // Check the request method and URL
+  if (req.method === 'GET' && req.url === '/') {
+    // Handle the GET request for the root URL
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Hello, this is a GET request!');
+  }
 });
+// const app = express();
 
 const io = new Server(httpServer, {
   cors: {
     origin: ['https://rumikub-counter.vercel.app'], // Replace with your frontend URL
     methods: ['GET', 'POST'],
-    allowedHeaders: ['my-custom-header'],
+    // allowedHeaders: ['my-custom-header'],
     credentials: true,
   },
 });
@@ -72,4 +74,4 @@ httpServer.listen(PORT, () => {
   console.log(`Socket.io server is running on port ${PORT}`);
 });
 
-export default app;
+export default httpServer;
