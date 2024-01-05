@@ -1,9 +1,3 @@
 #!/bin/bash
 cd /home/ubuntu/turn_timer_server
-echo "test-----------------------------------------------"
-nvm -v
-nvm alias default 20
-source ~/.bashrc
-node -v
-npm -v
 npm install
