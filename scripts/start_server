@@ -1,8 +1,10 @@
 #!/bin/bash
 # npm install
 cd /home/ubuntu/turn_timer_server
+cat ./dist/src/server/index.ts
 rm -r ./dist
 cat ./src/server/index.ts
 npm run build
+cat ./dist/src/server/index.ts
 pm2 kill
 pm2 start ./dist/src/server/index.js
