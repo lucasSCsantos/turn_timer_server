@@ -1,12 +1,12 @@
 import http from 'http';
 import { Server } from 'socket.io';
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 
 const httpServer = http.createServer();
 const app = express();
 
-app.get('/', (req, res) => {
-  res.send('test');
+app.get('/', (req: Request, res: Response) => {
+  res.send('Express + TypeScript Server');
 });
 
 const io = new Server(httpServer, {
