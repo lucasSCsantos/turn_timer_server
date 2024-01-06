@@ -1,6 +1,6 @@
 import http from 'http';
 import { Server } from 'socket.io';
-import { validateUsername } from '../helpers/users';
+import { getRoomUsersList, validateUsername } from '../helpers/users';
 import errors from '../data/errors';
 import {
   type ChangeTurnEventData,
@@ -11,11 +11,7 @@ const httpServer = http.createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-      'https://rumikub-counter.vercel.app',
-      'http://localhost:3000',
-      'https://rumikub-counter-git-develop-lucasscsantos.vercel.app',
-    ],
+    origin: ['https://rumikub-counter.vercel.app'],
     methods: ['GET', 'POST'],
     // allowedHeaders: ['my-custom-header'],
     credentials: true,
@@ -66,6 +62,8 @@ io.on('connection', (socket) => {
         number: clients?.size,
       };
 
+      socket.emit('users_list', getRoomUsersList(users[roomId]));
+
       socket.emit('user_join', {
         username,
         invite_id: 1,
@@ -84,14 +82,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('change_turn', ({ roomId, number }: ChangeTurnEventData) => {
-    const clients = io.sockets.adapter.rooms.get(roomId);
+    const clients = getRoomUsersList(users[roomId]);
     const actualNumber = number;
 
     if (clients) {
-      const clientsList = Array.from(clients);
-
-      const nextNumber = clients.size === actualNumber ? 1 : actualNumber + 1;
-      const nextClient = clientsList[nextNumber - 1];
+      const nextNumber = clients.length === actualNumber ? 1 : actualNumber + 1;
+      const nextClient = clients[nextNumber - 1].id;
 
       io.to(nextClient).emit('turn');
     }
