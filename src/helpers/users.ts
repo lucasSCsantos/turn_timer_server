@@ -36,3 +36,15 @@ export const getRoomUsersList = (
 
   return usersList;
 };
+
+export const findAdmin = (
+  users: UserDataWithId[]
+): UserDataWithId | undefined => {
+  return users.find((user) => user.role === 'ADMIN');
+};
+
+export const findFirst = (
+  users: UserDataWithId[]
+): UserDataWithId | undefined => {
+  return users.find((user) => user.number === 1);
+};

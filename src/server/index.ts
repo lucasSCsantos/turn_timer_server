@@ -1,17 +1,24 @@
 import http from 'http';
 import { Server } from 'socket.io';
-import { getRoomUsersList, validateUsername } from '../helpers/users';
+import {
+  findAdmin,
+  findFirst,
+  getRoomUsersList,
+  validateUsername,
+} from '../helpers/users';
 import errors from '../data/errors';
 import {
+  type RestartTimerEventData,
   type ChangeTurnEventData,
   type JoinRoomEventData,
+  type ChangeOrderEventData,
 } from '../@types/socket';
 
 const httpServer = http.createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ['https://rumikub-counter.vercel.app'],
+    origin: ['https://rumikub-counter.vercel.app', 'http://localhost:3000'],
     methods: ['GET', 'POST'],
     // allowedHeaders: ['my-custom-header'],
     credentials: true,
@@ -62,7 +69,7 @@ io.on('connection', (socket) => {
         number: clients?.size,
       };
 
-      socket.emit('users_list', getRoomUsersList(users[roomId]));
+      io.to(roomId).emit('users_list', getRoomUsersList(users[roomId]));
 
       socket.emit('user_join', {
         username,
@@ -87,11 +94,51 @@ io.on('connection', (socket) => {
 
     if (clients) {
       const nextNumber = clients.length === actualNumber ? 1 : actualNumber + 1;
-      const nextClient = clients[nextNumber - 1].id;
+      const nextClient =
+        clients.find(({ number }) => number === nextNumber)?.id ??
+        clients[nextNumber - 1].id;
 
       io.to(nextClient).emit('turn');
     }
   });
+
+  socket.on('start', (roomId: string) => {
+    socket.to(roomId).emit('start');
+  });
+
+  socket.on('stop', (roomId: string) => {
+    socket.to(roomId).emit('stop');
+  });
+
+  socket.on('restart_timer', ({ roomId, userId }: RestartTimerEventData) => {
+    const clients = getRoomUsersList(users[roomId]);
+    const admin = findAdmin(clients);
+
+    if (userId !== admin?.id) {
+      throw new Error('User is not admin');
+    }
+
+    if (clients) {
+      const firstClient = findFirst(clients);
+
+      if (firstClient) io.to(firstClient?.id).emit('turn');
+    }
+  });
+
+  socket.on(
+    'change_order',
+    ({ roomId, admin, newOrder }: ChangeOrderEventData) => {
+      if (!admin) {
+        throw new Error('User is not admin');
+      }
+
+      newOrder.forEach(({ id, number }) => {
+        users[roomId][id].number = number;
+      });
+
+      io.to(roomId).emit('users_list', newOrder);
+    }
+  );
 
   socket.on('disconnect', () => {
     const roomId = currentRoomId;
@@ -125,6 +172,8 @@ io.on('connection', (socket) => {
 
         // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete users[roomId][socket.id];
+
+        io.to(roomId).emit('users_list', getRoomUsersList(users[roomId]));
       }
 
       if (!clients) {
@@ -137,7 +186,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT ?? 3000;
+const PORT = process.env.PORT ?? 3001;
 
 httpServer.listen(PORT, () => {
   console.log(`Socket.io server is running on port ${PORT}`);
