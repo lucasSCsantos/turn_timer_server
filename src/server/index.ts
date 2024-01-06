@@ -18,7 +18,7 @@ const httpServer = http.createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ['https://rumikub-counter.vercel.app', 'http://localhost:3000'],
+    origin: ['https://rumikub-counter.vercel.app'],
     methods: ['GET', 'POST'],
     // allowedHeaders: ['my-custom-header'],
     credentials: true,
