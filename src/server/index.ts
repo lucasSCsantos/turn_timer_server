@@ -25,6 +25,7 @@ const io = new Server(httpServer, {
   },
 });
 
+const started: string[] = [];
 const users: Record<
   string,
   Record<
@@ -69,7 +70,14 @@ io.on('connection', (socket) => {
         number: clients?.size,
       };
 
+      console.log(
+        'before users list',
+        getRoomUsersList(users[roomId]).map(({ number }) => number)
+      );
+
       io.to(roomId).emit('users_list', getRoomUsersList(users[roomId]));
+
+      console.log(users[roomId]);
 
       socket.emit('user_join', {
         username,
@@ -79,6 +87,10 @@ io.on('connection', (socket) => {
       });
 
       const [admin] = Array.from(clients);
+
+      if (started.includes(roomId)) {
+        socket.emit('start');
+      }
 
       io.to(admin).emit('user_log', {
         id: socket.id,
@@ -103,10 +115,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('start', (roomId: string) => {
+    started.push(roomId);
     socket.to(roomId).emit('start');
   });
 
   socket.on('stop', (roomId: string) => {
+    started.splice(started.indexOf(roomId), 1);
     socket.to(roomId).emit('stop');
   });
 
@@ -132,6 +146,11 @@ io.on('connection', (socket) => {
         throw new Error('User is not admin');
       }
 
+      console.log(
+        'on change order',
+        newOrder.map(({ number }) => number)
+      );
+      console.log(newOrder);
       newOrder.forEach(({ id, number }) => {
         users[roomId][id].number = number;
       });
@@ -172,6 +191,12 @@ io.on('connection', (socket) => {
 
         // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete users[roomId][socket.id];
+
+        getRoomUsersList(users[roomId])
+          .sort((a, b) => a.number - b.number)
+          .forEach(({ id, number }, index) => {
+            users[roomId][id].number = index + 1;
+          });
 
         io.to(roomId).emit('users_list', getRoomUsersList(users[roomId]));
       }
