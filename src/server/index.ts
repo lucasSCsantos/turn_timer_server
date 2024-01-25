@@ -1,24 +1,26 @@
 import http from 'http';
 import { Server } from 'socket.io';
-import {
-  findAdmin,
-  findFirst,
-  getRoomUsersList,
-  validateUsername,
-} from '../helpers/users';
-import errors from '../data/errors';
+import { findAdmin, findFirst, getRoomUsersList } from '../helpers/users';
 import {
   type RestartTimerEventData,
   type ChangeTurnEventData,
   type JoinRoomEventData,
   type ChangeOrderEventData,
 } from '../@types/socket';
+import { setRoomConfig, updateRoomConfig } from '../helpers/room';
 
 const httpServer = http.createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ['https://rumikub-counter.vercel.app'],
+    origin: [
+      // 'https://rumikub-counter.vercel.app',
+      // 'http://localhost:3000',
+      // 'http://localhost:8081',
+      'exp://192.168.1.11:8081',
+      'http://192.168.1.11:8081',
+      '*',
+    ],
     methods: ['GET', 'POST'],
     // allowedHeaders: ['my-custom-header'],
     credentials: true,
@@ -37,66 +39,94 @@ const users: Record<
     }
   >
 > = {};
+const defaultConfigs = {
+  id: '',
+  users: [],
+  type: 'desc',
+  time: 60000,
+  access: 'public',
+  url: '',
+};
+const rooms: Array<typeof defaultConfigs> = [];
 
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
   let currentRoomId: string;
 
   socket.on('join_room', ({ roomId, username }: JoinRoomEventData) => {
+    console.log('aaaaaaaaaaaaaaaaaaaaaaaa');
     void socket.join(roomId);
 
-    currentRoomId = roomId;
+    const room = rooms.find((r) => r.id === roomId);
 
-    users[roomId] = {
-      ...users[roomId],
-    };
-
-    const usernameAlreadyExists = validateUsername(users, username, roomId);
-
-    if (usernameAlreadyExists) {
-      socket.emit('user_join_error', {
-        error: errors.username_already_exists,
-      });
-
-      return;
-    }
-
-    const clients = io.sockets.adapter.rooms.get(roomId);
-
-    if (clients) {
-      users[roomId][socket.id] = {
-        username,
-        role: clients?.size === 1 ? 'ADMIN' : 'USER',
-        number: clients?.size,
-      };
-
-      console.log(
-        'before users list',
-        getRoomUsersList(users[roomId]).map(({ number }) => number)
+    if (!room) {
+      const roomConfig = setRoomConfig(
+        roomId,
+        { username, id: socket.id },
+        defaultConfigs
       );
 
-      io.to(roomId).emit('users_list', getRoomUsersList(users[roomId]));
+      rooms.push(roomConfig as typeof defaultConfigs);
+    } else {
+      const index = rooms.indexOf(room);
 
-      console.log(users[roomId]);
-
-      socket.emit('user_join', {
+      room.users.push({
         username,
-        invite_id: 1,
-        role: clients?.size === 1 ? 'ADMIN' : 'USER',
-        number: clients?.size,
-      });
-
-      const [admin] = Array.from(clients);
-
-      if (started.includes(roomId)) {
-        socket.emit('start');
-      }
-
-      io.to(admin).emit('user_log', {
         id: socket.id,
-        username,
-        action: 'connect',
-      });
+        role: 'USER',
+        number: room.users.length + 1,
+      } as unknown as never);
+
+      rooms.splice(index, 1, room);
+    }
+
+    // const usernameAlreadyExists = validateUsername(users, username, roomId);
+
+    // if (usernameAlreadyExists) {
+    //   socket.emit('user_join_error', {
+    //     error: errors.username_already_exists,
+    //   });
+
+    //   return;
+    // }
+
+    // const clients = io.sockets.adapter.rooms.get(roomId);
+    console.log(room, rooms);
+    io.to(roomId).emit('joined', room);
+    // if (clients) {
+    // users[roomId][socket.id] = {
+    //   username,
+    //   role: clients?.size === 1 ? 'ADMIN' : 'USER',
+    //   number: clients?.size,
+    // };
+
+    // const [admin] = Array.from(clients);
+
+    // if (started.includes(roomId)) {
+    //   socket.emit('start');
+    // }
+
+    // io.to(admin).emit('user_log', {
+    //   id: socket.id,
+    //   username,
+    //   action: 'connect',
+    // });
+    // }
+  });
+
+  socket.on('change_room_config', (config: typeof defaultConfigs) => {
+    const room = rooms.find((r) => r.id === config.id);
+
+    if (room) {
+      const index = rooms.indexOf(room);
+
+      const newRoomConfig = updateRoomConfig(room, config);
+
+      rooms.splice(index, 1, newRoomConfig as typeof defaultConfigs);
+
+      io.to(room.id).emit('changed_room_config', newRoomConfig);
+
+      console.log(rooms);
     }
   });
 
@@ -211,7 +241,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT ?? 3000;
+const PORT = process.env.PORT ?? 3001;
 
 httpServer.listen(PORT, () => {
   console.log(`Socket.io server is running on port ${PORT}`);
