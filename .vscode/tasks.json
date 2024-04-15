@@ -11,24 +11,18 @@
 				"kind": "build",
 				"isDefault": true
 			},
-			"presentation": {
-				"close": true,
-			},
-			"label": "tsc: watch - tsconfig.json"
+			// "presentation": {
+			// 	"close": true,
+			// },
+			"label": "tsc: watch - tsconfig.json",
 		},
-		{
-      "label": "Terminate All Tasks",
-      "command": "echo ${input:terminate}",
-      "type": "shell",
-      "problemMatcher": []
-    }
 	],
-	"inputs": [
-    {
-      "id": "terminate",
-      "type": "command",
-      "command": "workbench.action.tasks.terminate",
-      "args": "terminateAll"
-    }
-  ]
+	// "inputs": [
+  //   {
+  //     "id": "terminate",
+  //     "type": "command",
+  //     "command": "workbench.action.tasks.terminate",
+  //     "args": "terminateAll"
+  //   }
+  // ]
 }

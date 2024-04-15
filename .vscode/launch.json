@@ -18,7 +18,7 @@
 				"${workspaceFolder}/**/*.js"
 			],
 			"preLaunchTask": "tsc: watch - tsconfig.json",
-			"postDebugTask": "Terminate All Tasks",
+			// "postDebugTask": "Terminate All Tasks",
 		}
 	]
 }

@@ -1,15 +1,11 @@
-export interface UserData {
-  username: string;
-  role: string;
-  number: number;
-}
+import { type User } from '../@types/redis';
 
-export interface UserDataWithId extends UserData {
+export interface UserDataWithId extends User {
   id: string;
 }
 
 export const validateUsername = (
-  users: Record<string, Record<string, UserData>>,
+  users: Record<string, Record<string, User>>,
   username: string,
   roomId: string
 ): boolean => {
@@ -25,7 +21,7 @@ export const validateUsername = (
 };
 
 export const getRoomUsersList = (
-  users: Record<string, UserData>
+  users: Record<string, User>
 ): UserDataWithId[] => {
   const usersList = Object.entries(users).map(([id, users]) => {
     return {
@@ -35,16 +31,4 @@ export const getRoomUsersList = (
   });
 
   return usersList;
-};
-
-export const findAdmin = (
-  users: UserDataWithId[]
-): UserDataWithId | undefined => {
-  return users.find((user) => user.role === 'ADMIN');
-};
-
-export const findFirst = (
-  users: UserDataWithId[]
-): UserDataWithId | undefined => {
-  return users.find((user) => user.number === 1);
 };

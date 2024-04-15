@@ -1,6 +1,8 @@
 export interface JoinRoomEventData {
-  roomId: string;
+  room: string;
   username: string;
+  password: string;
+  access: 'public' | 'private';
 }
 
 export interface ChangeTurnEventData {
@@ -17,4 +19,9 @@ export interface ChangeOrderEventData {
   roomId: string;
   admin: boolean;
   newOrder: Array<{ id: string; number: number }>;
+}
+
+export interface InviteEventData {
+  inviteId: string;
+  username: string;
 }
