@@ -5,6 +5,10 @@ export interface JoinRoomEventData {
   access: 'public' | 'private';
 }
 
+export interface ExitRoomData {
+  id: string;
+}
+
 export interface ChangeTurnEventData {
   roomId: string;
   number: number;
