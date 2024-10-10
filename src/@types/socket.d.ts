@@ -1,3 +1,5 @@
+import { type User } from './redis';
+
 export interface JoinRoomEventData {
   room: string;
   username: string;
@@ -5,8 +7,29 @@ export interface JoinRoomEventData {
   access: 'public' | 'private';
 }
 
+export interface ChangeOrderEventData {
+  roomId: string;
+  userId: string;
+  users: User[];
+}
+
+export interface StartEventData {
+  roomId: string;
+  time: number;
+}
+
+export interface EndGameEventData {
+  roomId: string;
+}
+
+export interface StopEventData {
+  roomId: string;
+  time: number;
+}
+
 export interface ExitRoomData {
-  id: string;
+  roomId: string;
+  userId: string;
 }
 
 export interface ChangeTurnEventData {
@@ -19,13 +42,12 @@ export interface RestartTimerEventData {
   userId: string;
 }
 
-export interface ChangeOrderEventData {
-  roomId: string;
-  admin: boolean;
-  newOrder: Array<{ id: string; number: number }>;
-}
-
 export interface InviteEventData {
   inviteId: string;
   username: string;
+}
+
+export interface RemovePlayerEventData {
+  roomId: string;
+  userId: string;
 }

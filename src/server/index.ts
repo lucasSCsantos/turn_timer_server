@@ -1,16 +1,30 @@
 import http from 'http';
 import { Server } from 'socket.io';
-import { type ExitRoomData, type JoinRoomEventData } from '../@types/socket';
+import {
+  type StartEventData,
+  type ChangeOrderEventData,
+  type ExitRoomData,
+  type JoinRoomEventData,
+  type RemovePlayerEventData,
+  type StopEventData,
+  type EndGameEventData,
+} from '../@types/socket';
 import {
   createNewRoomAndJoin,
   exitRoom,
   findUser,
   getRoom,
   joinExistingRoom,
-  setRoom,
   updateRoomConfig,
+  validateRoom,
 } from '../helpers/room';
-import { type RoomConfig } from '../@types/redis';
+import { generateUniqueCode } from '../utils/crypto';
+import {
+  getActualAndNextUser,
+  getUser,
+  updateActualUser,
+  updateUserState,
+} from '../helpers/users';
 
 const httpServer = http.createServer();
 
@@ -37,12 +51,11 @@ io.on('connection', (socket) => {
 
   socket.on(
     'create_room',
-    async ({ room: roomId, username, password, access }: JoinRoomEventData) => {
+    async ({ room: name, username }: JoinRoomEventData) => {
       try {
-        const room = await createNewRoomAndJoin(socket, roomId, username, {
-          access,
-          password,
-        });
+        const roomId = generateUniqueCode(name);
+
+        const room = await createNewRoomAndJoin(socket, roomId, username);
 
         const user = findUser(room, socket.id);
 
@@ -59,17 +72,13 @@ io.on('connection', (socket) => {
 
   socket.on(
     'join_room',
-    async ({ room: roomId, username, password }: JoinRoomEventData) => {
+    async ({ room: roomId, username }: JoinRoomEventData) => {
       try {
         const room = await getRoom(roomId);
 
-        // if (
-        //   room?.access === 'private' &&
-        //   password &&
-        //   decrypt(room.password) !== password
-        // ) {
-        //   socket.emit
-        // }
+        if (room?.users.length) {
+          throw Error('This room is full');
+        }
 
         await joinExistingRoom(socket, room, username);
 
@@ -86,112 +95,264 @@ io.on('connection', (socket) => {
     }
   );
 
-  socket.on('start', async (config: RoomConfig) => {
-    const users = config.users;
-
-    if (config.live) {
-      io.to(config.id).emit('start', { ...config, live: true, users });
-      return;
-    }
-
-    users[0].playing = true;
-    users[0].next = false;
-
-    if (users.length > 1) {
-      users[1].next = true;
-    }
-
-    io.to(config.id).emit('start', { ...config, live: true, users });
-
+  socket.on('change_order', async ({ roomId, users }: ChangeOrderEventData) => {
     try {
-      const room = await getRoom(config.id);
+      const room = await validateRoom(roomId);
 
-      if (room) {
-        const newRoomConfig = updateRoomConfig(room, config);
-        await setRoom(config.id, newRoomConfig);
+      if (room.live) {
+        throw Error('This room is already live');
       }
+
+      const user = getUser(socket.id, room);
+
+      if (!user) {
+        throw Error("This user doesn't exist or is not in this room");
+      }
+
+      if (user.role !== 'ADMIN') {
+        throw Error('This user is not able to to this action');
+      }
+
+      const updatedRoom = await updateRoomConfig(room, { users });
+
+      io.to(roomId).emit('changed_room_config', updatedRoom);
     } catch (error: any) {
       socket.emit('error', { message: error.message });
     }
   });
 
-  socket.on('change_turn', async (config: RoomConfig) => {
-    const users = config.users;
-
-    if (!config.live) {
-      throw Error('This game has not started yet!');
-    }
-
-    const index = users.findIndex(({ playing }) => playing);
-    const playingIndex = index + 1 === users.length ? 0 : index + 1;
-    const nextIndex = index + 2 >= users.length ? 0 : index + 2;
-
-    users[index].playing = false;
-    users[playingIndex].next = false;
-    users[playingIndex].playing = true;
-    users[nextIndex].next = true;
-
-    io.to(config.id).emit('change_turn', { ...config, live: true, users });
-
+  socket.on('start', async ({ roomId, time }: StartEventData) => {
     try {
-      const room = await getRoom(config.id);
+      const room = await validateRoom(roomId);
 
-      if (room) {
-        const newRoomConfig = updateRoomConfig(room, config);
-        await setRoom(config.id, newRoomConfig);
+      const user = getUser(socket.id, room);
+
+      if (!user) {
+        throw Error("This user doesn't exist or is not in this room");
       }
+
+      if (!room.live && user.position !== 1) {
+        throw Error('This user is not able to to this action');
+      }
+
+      const updatedUsers = updateActualUser(user.id, room.users);
+
+      const updatedRoom = await updateRoomConfig(room, {
+        live: true,
+        users: updatedUsers,
+        round: !room.live ? 1 : room.round,
+      });
+
+      io.to(room.id).emit('changed_room_config', updatedRoom);
+
+      io.to(room.id).emit('start', {
+        date: new Date(),
+        userId: socket.id,
+        time: time || room.time,
+      });
     } catch (error: any) {
       socket.emit('error', { message: error.message });
     }
   });
 
-  socket.on('stop', async (config: RoomConfig) => {
-    if (!config.live) {
-      throw Error('This game has not started yet');
-    }
+  socket.on('restart', async ({ roomId }: StartEventData) => {
+    try {
+      const room = await validateRoom(roomId);
 
-    io.to(config.id).emit('stop');
+      const user = getUser(socket.id, room);
+
+      if (!user) {
+        throw Error("This user doesn't exist or is not in this room");
+      }
+
+      if (!room.live) {
+        throw Error('This room has not started already');
+      }
+
+      io.to(room.id).emit('start', {
+        date: new Date(),
+        userId: socket.id,
+        time: room.time,
+      });
+    } catch (error: any) {
+      socket.emit('error', { message: error.message });
+    }
   });
 
-  socket.on('exit', async ({ id: roomId }: ExitRoomData) => {
+  socket.on('end_game', async ({ roomId }: EndGameEventData) => {
     try {
+      const room = await validateRoom(roomId);
+
+      const user = getUser(socket.id, room);
+
+      if (!user) {
+        throw Error("This user doesn't exist or is not in this room");
+      }
+
+      if (!room.live && user.position !== 1) {
+        throw Error('This user is not able to to this action');
+      }
+
+      const updatedUsers = updateActualUser(user.id, room.users);
+
+      const updatedRoom = await updateRoomConfig(room, {
+        live: false,
+        users: updatedUsers,
+      });
+
+      io.to(room.id).emit('changed_room_config', updatedRoom);
+
+      io.to(room.id).emit('end_game');
+    } catch (error: any) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('change_turn', async ({ roomId }: StartEventData) => {
+    try {
+      const room = await validateRoom(roomId);
+
+      const user = getUser(socket.id, room);
+
+      if (!user) {
+        throw Error("This user doesn't exist or is not in this room");
+      }
+
+      if (!user.actual) {
+        throw Error("It's not this user turn");
+      }
+
+      if (!room.live) {
+        throw Error(
+          "You can't change turn because this room is not live already"
+        );
+      }
+
+      const { nextUser, actualUser } = getActualAndNextUser(
+        user.id,
+        room.users
+      );
+
+      const updatedUsers = updateUserState(nextUser, actualUser, room.users);
+
+      const updatedRoom = await updateRoomConfig(room, {
+        live: true,
+        users: updatedUsers,
+        round: nextUser.position === 1 ? room.round + 1 : room.round,
+      });
+
+      io.to(room.id).emit('changed_room_config', updatedRoom);
+
+      io.to(room.id).emit('start', {
+        date: new Date(),
+        userId: nextUser.id,
+        time: room.time,
+      });
+    } catch (error: any) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('stop', async ({ roomId, time }: StopEventData) => {
+    try {
+      const room = await validateRoom(roomId);
+
+      const user = getUser(socket.id, room);
+
+      if (!user) {
+        throw Error("This user doesn't exist or is not in this room");
+      }
+
+      if (user.role !== 'ADMIN') {
+        throw Error('This user is not able to to this action');
+      }
+
+      if (!room.live) {
+        throw Error('This room is not live');
+      }
+
+      io.to(room.id).emit('stop', { time });
+    } catch (error: any) {
+      socket.emit('error', { message: error.message });
+    }
+  });
+
+  socket.on('exit', async ({ roomId }: ExitRoomData) => {
+    try {
+      const room = await validateRoom(roomId);
+
+      const updatedRoom = await exitRoom(room, socket.id);
+
       void socket.leave(roomId);
+
       io.to(socket.id).emit('exit');
 
-      const room = await getRoom(roomId);
-
-      if (room) {
-        await exitRoom(room, socket);
-
-        if (room.users[0].id !== socket.id) {
-          io.to(room.users[0].id).emit('change_role', room.users[0]);
+      if (updatedRoom) {
+        if (updatedRoom.users[0].id !== socket.id) {
+          io.to(updatedRoom.users[0].id).emit(
+            'change_role',
+            updatedRoom.users[0]
+          );
         }
 
-        io.to(roomId).emit('user_exited', room);
+        io.to(roomId).emit('user_exited', updatedRoom);
       }
     } catch (error: any) {
       socket.emit('error', { message: error.message });
     }
   });
+
+  socket.on(
+    'remove_player',
+    async ({ roomId, userId }: RemovePlayerEventData) => {
+      try {
+        const room = await validateRoom(roomId);
+
+        const user = getUser(socket.id, room);
+
+        if (!user || user.role !== 'ADMIN') {
+          throw Error('This user is not able to to this action');
+        }
+
+        if (userId === socket.id) {
+          throw Error('You are not able to remove yourself!');
+        }
+
+        const updatedRoom = await exitRoom(room, userId);
+
+        io.to(userId).emit('exit');
+
+        if (updatedRoom) {
+          io.to(roomId).emit('user_exited', updatedRoom);
+        }
+      } catch (error: any) {
+        socket.emit('error', { message: error.message });
+      }
+    }
+  );
 
   socket.on('disconnecting', async () => {
     try {
       const roomId = [...socket.rooms][1];
 
       if (roomId) {
+        const room = await validateRoom(roomId);
+
+        const updatedRoom = await exitRoom(room, socket.id);
+
         void socket.leave(roomId);
-        io.to(socket.id).emit('exited');
 
-        const room = await getRoom(roomId);
+        io.to(socket.id).emit('exit');
 
-        if (room) {
-          await exitRoom(room, socket);
-
-          if (room.users.length && room.users[0].id !== socket.id) {
-            io.to(room.users[0].id).emit('change_role', room.users[0]);
+        if (updatedRoom) {
+          if (updatedRoom.users[0].id !== socket.id) {
+            io.to(updatedRoom.users[0].id).emit(
+              'change_role',
+              updatedRoom.users[0]
+            );
           }
 
-          io.to(roomId).emit('user_exited', room);
+          io.to(roomId).emit('user_exited', updatedRoom);
         }
       }
     } catch (error: any) {

@@ -2,16 +2,16 @@ import { type Socket } from 'socket.io';
 import { encrypt } from '../utils/crypto';
 import { invalidate, recover, save } from '../utils/redis';
 import { type User, type RoomConfig } from '../@types/redis';
+import { getUser } from './users';
 
 const defaultRoomConfig: RoomConfig = {
   id: '',
   users: [],
   type: 'desc',
   time: 60000,
-  access: 'public',
   url: '',
   live: false,
-  password: '',
+  round: 0,
 };
 
 export const findUser = (
@@ -32,11 +32,16 @@ export const findUserIndex = (room: RoomConfig, id: string): number => {
   return room.users.findIndex((u) => u.id === id);
 };
 
-export const removeUser = (room: RoomConfig, id: string): User[] => {
+export const removeUserAndGetUsers = (room: RoomConfig, id: string): User[] => {
   const index = room.users.findIndex((u) => u.id === id);
 
   if (index >= 0) {
-    return [...room.users.slice(0, index), ...room.users.slice(index + 1)];
+    return [
+      ...room.users.slice(0, index),
+      ...room.users
+        .slice(index + 1)
+        .map((user) => ({ ...user, position: user.position - 1 })),
+    ];
   }
   return room.users;
 };
@@ -55,6 +60,8 @@ export const createRoomConfig = (
         role: 'ADMIN',
         next: true,
         playing: false,
+        position: 1,
+        actual: false,
       },
     ],
     url: createInviteUrl(roomId),
@@ -63,14 +70,18 @@ export const createRoomConfig = (
   return roomConfig as RoomConfig;
 };
 
-export const updateRoomConfig = (
-  object: Record<string, any>,
-  config: Record<string, any>
-): any => {
-  return {
+export const updateRoomConfig = async (
+  object: RoomConfig,
+  config: Partial<RoomConfig>
+): Promise<RoomConfig> => {
+  const room = {
     ...object,
     ...config,
   };
+
+  await setRoom(room.id, room);
+
+  return room;
 };
 
 export const createInviteUrl = (roomId: string): string => {
@@ -95,25 +106,33 @@ export const deleteRoom = async (roomId: string): Promise<void> => {
 export const createNewRoomAndJoin = async (
   socket: Socket,
   roomId: string,
-  username: string,
-  config: { access: RoomConfig['access']; password: RoomConfig['password'] }
+  username: string
 ): Promise<RoomConfig> => {
-  const room = await getRoom(roomId);
-
-  if (room) {
-    throw Error('There is already a room with this name!');
-  }
+  await validateRoom(roomId);
 
   const roomConfig = createRoomConfig(
     roomId,
     { username, id: socket.id },
-    { ...defaultRoomConfig, ...config }
+    {
+      ...defaultRoomConfig,
+    }
   );
 
   await setRoom(roomId, roomConfig);
+
   void socket.join(roomId);
 
   return roomConfig;
+};
+
+export const validateRoom = async (roomId: string): Promise<RoomConfig> => {
+  const room = await getRoom(roomId);
+
+  if (!room) {
+    throw Error("This room doesn't exists");
+  }
+
+  return room;
 };
 
 export const joinExistingRoom = async (
@@ -146,6 +165,7 @@ export const joinExistingRoom = async (
       role: 'USER',
       next: false,
       playing: false,
+      position: room.users.length + 1,
     } as unknown as never);
   }
 
@@ -155,22 +175,22 @@ export const joinExistingRoom = async (
 
 export const exitRoom = async (
   room: RoomConfig,
-  socket: Socket
-): Promise<void> => {
-  const user = findUser(room, socket.id);
+  userId: string
+): Promise<RoomConfig | undefined> => {
+  const user = getUser(userId, room);
 
-  if (user) {
-    room.users = removeUser(room, socket.id);
-  }
+  const users = removeUserAndGetUsers(room, userId);
 
-  if (!room.users.length) {
+  if (!users.length) {
     void deleteRoom(room.id);
     return;
   }
 
   if (user?.role === 'ADMIN') {
-    room.users[0].role = 'ADMIN';
+    users[0].role = 'ADMIN';
   }
 
-  await setRoom(room.id, room);
+  const updatedRoom = await updateRoomConfig(room, { users });
+
+  return updatedRoom;
 };

@@ -3,16 +3,19 @@ export interface RoomConfig {
   users: User[];
   type: string;
   time: number;
-  access: string;
+  // access: string;
   url: string;
   live: boolean;
-  password: string;
+  // password: string;
+  round: number;
 }
 
 export interface User {
   id: string;
   username: string;
-  role: string;
+  role: 'ADMIN' | 'USER';
   playing: boolean;
+  position: number;
   next: boolean;
+  actual: boolean;
 }
