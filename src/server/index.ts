@@ -23,8 +23,10 @@ import {
   getActualAndNextUser,
   getUser,
   updateActualUser,
+  updatePosition,
   updateUserState,
 } from '../helpers/users';
+import { instrument } from '@socket.io/admin-ui';
 
 const httpServer = http.createServer();
 
@@ -36,10 +38,16 @@ const io = new Server(httpServer, {
       'exp://192.168.1.11:8081',
       'http://192.168.1.11:8081',
       '*',
+      'https://admin.socket.io',
     ],
     methods: ['GET', 'POST'],
     credentials: true,
   },
+});
+
+instrument(io, {
+  auth: false,
+  mode: 'development',
 });
 
 io.on('connection', (socket) => {
@@ -76,19 +84,21 @@ io.on('connection', (socket) => {
       try {
         const room = await getRoom(roomId);
 
-        if (room?.users.length) {
+        if (room?.users.length === 4) {
           throw Error('This room is full');
         }
 
-        await joinExistingRoom(socket, room, username);
-
-        const user = findUser(room, socket.id);
+        const { room: updatedRoom, user } = await joinExistingRoom(
+          socket,
+          room,
+          username
+        );
 
         // Unicast to client
         io.to(socket.id).emit('joined', user);
 
         // Broadcast to room
-        io.to(roomId).emit('changed_room_config', room);
+        io.to(roomId).emit('changed_room_config', updatedRoom);
       } catch (error: any) {
         socket.emit('error', { message: error.message });
       }
@@ -113,7 +123,8 @@ io.on('connection', (socket) => {
         throw Error('This user is not able to to this action');
       }
 
-      const updatedRoom = await updateRoomConfig(room, { users });
+      const updatedUsers = updatePosition(users);
+      const updatedRoom = await updateRoomConfig(room, { users: updatedUsers });
 
       io.to(roomId).emit('changed_room_config', updatedRoom);
     } catch (error: any) {
@@ -121,9 +132,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('start', async ({ roomId, time }: StartEventData) => {
+  socket.on('start', async ({ id, time }: StartEventData) => {
     try {
-      const room = await validateRoom(roomId);
+      const room = await validateRoom(id);
 
       const user = getUser(socket.id, room);
 
@@ -143,21 +154,20 @@ io.on('connection', (socket) => {
         round: !room.live ? 1 : room.round,
       });
 
-      io.to(room.id).emit('changed_room_config', updatedRoom);
-
       io.to(room.id).emit('start', {
-        date: new Date(),
-        userId: socket.id,
+        date: new Date().getTime(),
+        // userId: socket.id,
         time: time || room.time,
+        room: updatedRoom,
       });
     } catch (error: any) {
       socket.emit('error', { message: error.message });
     }
   });
 
-  socket.on('restart', async ({ roomId }: StartEventData) => {
+  socket.on('restart', async ({ id }: StartEventData) => {
     try {
-      const room = await validateRoom(roomId);
+      const room = await validateRoom(id);
 
       const user = getUser(socket.id, room);
 
@@ -179,9 +189,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('end_game', async ({ roomId }: EndGameEventData) => {
+  socket.on('end_game', async ({ id }: EndGameEventData) => {
     try {
-      const room = await validateRoom(roomId);
+      const room = await validateRoom(id);
 
       const user = getUser(socket.id, room);
 
@@ -208,9 +218,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('change_turn', async ({ roomId }: StartEventData) => {
+  socket.on('change_turn', async ({ id }: StartEventData) => {
     try {
-      const room = await validateRoom(roomId);
+      const room = await validateRoom(id);
 
       const user = getUser(socket.id, room);
 
@@ -241,21 +251,21 @@ io.on('connection', (socket) => {
         round: nextUser.position === 1 ? room.round + 1 : room.round,
       });
 
-      io.to(room.id).emit('changed_room_config', updatedRoom);
+      // io.to(room.id).emit('changed_room_config', updatedRoom);
 
       io.to(room.id).emit('start', {
-        date: new Date(),
-        userId: nextUser.id,
-        time: room.time,
+        date: new Date().getTime(),
+        // userId: nextUser.id, // id de quem vai jogar
+        room: updatedRoom,
       });
     } catch (error: any) {
       socket.emit('error', { message: error.message });
     }
   });
 
-  socket.on('stop', async ({ roomId, time }: StopEventData) => {
+  socket.on('stop', async ({ id, time }: StopEventData) => {
     try {
-      const room = await validateRoom(roomId);
+      const room = await validateRoom(id);
 
       const user = getUser(socket.id, room);
 
@@ -277,13 +287,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('exit', async ({ roomId }: ExitRoomData) => {
+  socket.on('exit', async ({ id }: ExitRoomData) => {
     try {
-      const room = await validateRoom(roomId);
+      const room = await validateRoom(id);
 
       const updatedRoom = await exitRoom(room, socket.id);
 
-      void socket.leave(roomId);
+      void socket.leave(id);
 
       io.to(socket.id).emit('exit');
 
@@ -295,41 +305,38 @@ io.on('connection', (socket) => {
           );
         }
 
-        io.to(roomId).emit('user_exited', updatedRoom);
+        io.to(id).emit('user_exited', updatedRoom);
       }
     } catch (error: any) {
       socket.emit('error', { message: error.message });
     }
   });
 
-  socket.on(
-    'remove_player',
-    async ({ roomId, userId }: RemovePlayerEventData) => {
-      try {
-        const room = await validateRoom(roomId);
+  socket.on('remove_player', async ({ id, userId }: RemovePlayerEventData) => {
+    try {
+      const room = await validateRoom(id);
 
-        const user = getUser(socket.id, room);
+      const user = getUser(socket.id, room);
 
-        if (!user || user.role !== 'ADMIN') {
-          throw Error('This user is not able to to this action');
-        }
-
-        if (userId === socket.id) {
-          throw Error('You are not able to remove yourself!');
-        }
-
-        const updatedRoom = await exitRoom(room, userId);
-
-        io.to(userId).emit('exit');
-
-        if (updatedRoom) {
-          io.to(roomId).emit('user_exited', updatedRoom);
-        }
-      } catch (error: any) {
-        socket.emit('error', { message: error.message });
+      if (!user || user.role !== 'ADMIN') {
+        throw Error('This user is not able to to this action');
       }
+
+      if (userId === socket.id) {
+        throw Error('You are not able to remove yourself!');
+      }
+
+      const updatedRoom = await exitRoom(room, userId);
+
+      io.to(userId).emit('exit');
+
+      if (updatedRoom) {
+        io.to(id).emit('user_exited', updatedRoom);
+      }
+    } catch (error: any) {
+      socket.emit('error', { message: error.message });
     }
-  );
+  });
 
   socket.on('disconnecting', async () => {
     try {

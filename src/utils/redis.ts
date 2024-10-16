@@ -6,6 +6,7 @@ export const save = async (key: string, value: any): Promise<void> => {
 
 export const recover = async <T>(key: string): Promise<T | null> => {
   const data = await redisClient.get(key);
+
   if (!data) {
     return null;
   }

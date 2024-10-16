@@ -8,6 +8,7 @@ declare global {
       REDIS_PORT: number;
       REDIS_PASSWORD: string;
       REDIS_USERNAME: string;
+      NODE_ENV: string;
     }
   }
 }

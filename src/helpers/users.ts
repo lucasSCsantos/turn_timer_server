@@ -72,7 +72,6 @@ export const getActualAndNextUser = (
   const firstUser = users.find(
     (user) => user.position === 1
   ) as unknown as User;
-
   return { nextUser: nextUser ?? firstUser, actualUser };
 };
 
@@ -85,12 +84,16 @@ export const updateUserState = (
 
   const nextUserIndex = users.findIndex((user) => user.id === nextUser?.id);
 
-  nextUser.actual = true;
   actualUser.actual = false;
+  nextUser.actual = true;
 
   return users.map((user, index) => {
     if (index === actualUserIndex) return actualUser;
     if (index === nextUserIndex) return nextUser;
     return user;
   });
+};
+
+export const updatePosition = (users: User[]): User[] => {
+  return users.map((user, index) => ({ ...user, position: index + 1 }));
 };

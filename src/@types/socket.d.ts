@@ -14,31 +14,31 @@ export interface ChangeOrderEventData {
 }
 
 export interface StartEventData {
-  roomId: string;
+  id: string;
   time: number;
 }
 
 export interface EndGameEventData {
-  roomId: string;
+  id: string;
 }
 
 export interface StopEventData {
-  roomId: string;
+  id: string;
   time: number;
 }
 
 export interface ExitRoomData {
-  roomId: string;
+  id: string;
   userId: string;
 }
 
 export interface ChangeTurnEventData {
-  roomId: string;
+  id: string;
   number: number;
 }
 
 export interface RestartTimerEventData {
-  roomId: string;
+  id: string;
   userId: string;
 }
 
@@ -48,6 +48,6 @@ export interface InviteEventData {
 }
 
 export interface RemovePlayerEventData {
-  roomId: string;
+  id: string;
   userId: string;
 }

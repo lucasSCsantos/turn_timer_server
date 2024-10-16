@@ -8,7 +8,7 @@ const defaultRoomConfig: RoomConfig = {
   id: '',
   users: [],
   type: 'desc',
-  time: 60000,
+  time: 60,
   url: '',
   live: false,
   round: 0,
@@ -108,7 +108,7 @@ export const createNewRoomAndJoin = async (
   roomId: string,
   username: string
 ): Promise<RoomConfig> => {
-  await validateRoom(roomId);
+  await validateRoomExists(roomId);
 
   const roomConfig = createRoomConfig(
     roomId,
@@ -125,6 +125,14 @@ export const createNewRoomAndJoin = async (
   return roomConfig;
 };
 
+export const validateRoomExists = async (roomId: string): Promise<void> => {
+  const room = await getRoom(roomId);
+
+  if (room) {
+    throw Error('This room already exists');
+  }
+};
+
 export const validateRoom = async (roomId: string): Promise<RoomConfig> => {
   const room = await getRoom(roomId);
 
@@ -139,13 +147,19 @@ export const joinExistingRoom = async (
   socket: Socket,
   room: RoomConfig | null,
   username: string
-): Promise<void> => {
+): Promise<{ user: User; room: RoomConfig }> => {
   if (!room) {
     throw Error('This room does not exist!');
   }
 
   if (room.live) {
     throw Error('You cant enter this room because it is already live!');
+  }
+
+  let user = getUser(socket.id, room);
+
+  if (user) {
+    throw Error("You're already in this room");
   }
 
   const userExists = findUserByUsername(room, username);
@@ -156,21 +170,23 @@ export const joinExistingRoom = async (
     );
   }
 
-  const user = findUser(room, socket.id);
+  user = {
+    actual: false,
+    username,
+    id: socket.id,
+    role: 'USER',
+    next: false,
+    playing: false,
+    position: room.users.length + 1,
+  };
 
-  if (!user) {
-    room.users.push({
-      username,
-      id: socket.id,
-      role: 'USER',
-      next: false,
-      playing: false,
-      position: room.users.length + 1,
-    } as unknown as never);
-  }
+  const users: User[] = [...room.users, user];
 
-  await setRoom(room.id, room);
+  const updatedRoom = await updateRoomConfig(room, { users });
+
   void socket.join(room.id);
+
+  return { room: updatedRoom, user };
 };
 
 export const exitRoom = async (
