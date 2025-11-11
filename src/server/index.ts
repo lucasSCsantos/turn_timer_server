@@ -37,6 +37,7 @@ const io = new Server(httpServer, {
       'http://localhost:8081',
       'exp://192.168.1.11:8081',
       'http://192.168.1.11:8081',
+      'http://192.168.5.67:8081',
       '*',
       'https://admin.socket.io',
     ],
@@ -105,9 +106,9 @@ io.on('connection', (socket) => {
     }
   );
 
-  socket.on('change_order', async ({ roomId, users }: ChangeOrderEventData) => {
+  socket.on('change_order', async ({ id, users }: ChangeOrderEventData) => {
     try {
-      const room = await validateRoom(roomId);
+      const room = await validateRoom(id);
 
       if (room.live) {
         throw Error('This room is already live');
@@ -123,10 +124,10 @@ io.on('connection', (socket) => {
         throw Error('This user is not able to to this action');
       }
 
-      const updatedUsers = updatePosition(users);
-      const updatedRoom = await updateRoomConfig(room, { users: updatedUsers });
+      // const updatedUsers = updatePosition(users);
+      const updatedRoom = await updateRoomConfig(room, { users });
 
-      io.to(roomId).emit('changed_room_config', updatedRoom);
+      io.to(id).emit('changed_room_config', updatedRoom);
     } catch (error: any) {
       socket.emit('error', { message: error.message });
     }

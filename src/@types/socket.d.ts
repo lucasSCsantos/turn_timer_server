@@ -8,7 +8,7 @@ export interface JoinRoomEventData {
 }
 
 export interface ChangeOrderEventData {
-  roomId: string;
+  id: string;
   userId: string;
   users: User[];
 }
